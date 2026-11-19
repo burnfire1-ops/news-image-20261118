@@ -9,11 +9,31 @@
 // Two 1px ink zone dividers (hero->grid, grid->brief) and a 10px
 // hero->grid gap; total 1019/1024. The gate takes a whole PNG or JPEG
 // of at most 1 MiB, 1024x1024 px.
+// Resubmit fix 1: validate the copy (size must match) and log confirmation.
+// Resubmit fix 2: check PNG signature + IHDR dimensions (must be 1024x1024).
 
-import { copyFileSync } from "node:fs";
+import { copyFileSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 const artwork = new URL("./entry.png", import.meta.url);
+const dest = join(outDir, "entry.png");
 
-copyFileSync(artwork, join(outDir, "entry.png"));
+const head = readFileSync(artwork);
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+if (!head.subarray(0, 8).equals(PNG_MAGIC)) {
+  throw new Error("entry.png is not a PNG file");
+}
+const width = head.readUInt32BE(16);
+const height = head.readUInt32BE(20);
+if (width !== 1024 || height !== 1024) {
+  throw new Error(`entry.png dimensions must be 1024x1024, got ${width}x${height}`);
+}
+
+copyFileSync(artwork, dest);
+const srcSize = statSync(artwork).size;
+const dstSize = statSync(dest).size;
+if (srcSize !== dstSize) {
+  throw new Error(`entry.png copy size mismatch: ${srcSize} != ${dstSize}`);
+}
+console.log(`entry.png copied OK (${dstSize} bytes, ${width}x${height})`);
